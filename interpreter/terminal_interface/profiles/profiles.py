@@ -171,11 +171,11 @@ def apply_profile(interpreter, profile, profile_path):
 
                 try:
                     if profile["llm"]["model"] == "gpt-4":
-                        text = text.replace("gpt-4", "gpt-4-turbo")
-                        profile["llm"]["model"] = "gpt-4-turbo"
-                    elif profile["llm"]["model"] == "gpt-4-turbo-preview":
-                        text = text.replace("gpt-4-turbo-preview", "gpt-4-turbo")
-                        profile["llm"]["model"] = "gpt-4-turbo"
+                        text = text.replace("gpt-4", "gpt-4o")
+                        profile["llm"]["model"] = "gpt-4o"
+                    elif profile["llm"]["model"] == "gpt-4o-preview":
+                        text = text.replace("gpt-4o-preview", "gpt-4o")
+                        profile["llm"]["model"] = "gpt-4o"
                 except:
                     raise
                     pass  # fine
@@ -567,6 +567,7 @@ def apply_profile_to_object(obj, profile):
         else:
             setattr(obj, key, value)
 
+
 def open_storage_dir(directory):
     dir = os.path.join(oi_dir, directory)
 
@@ -763,9 +764,9 @@ def migrate_user_app_directory():
 
 def write_key_to_profile(key, value):
     try:
-        with open(user_default_profile_path, 'r') as file:
+        with open(user_default_profile_path, "r") as file:
             lines = file.readlines()
-        
+
         version_line_index = None
         new_lines = []
         for index, line in enumerate(lines):
@@ -773,15 +774,17 @@ def write_key_to_profile(key, value):
                 version_line_index = index
                 break
             new_lines.append(line)
-        
+
         # Insert the new key-value pair before the version line
         if version_line_index is not None:
             if f"{key}: {value}\n" not in new_lines:
-                new_lines.append(f"{key}: {value}\n\n")  # Adding a newline for separation
+                new_lines.append(
+                    f"{key}: {value}\n\n"
+                )  # Adding a newline for separation
             # Append the version line and all subsequent lines
             new_lines.extend(lines[version_line_index:])
-        
-        with open(user_default_profile_path, 'w') as file:
+
+        with open(user_default_profile_path, "w") as file:
             file.writelines(new_lines)
     except Exception:
-        pass # Fail silently
+        pass  # Fail silently

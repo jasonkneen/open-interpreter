@@ -21,6 +21,7 @@ import time
 import pytest
 from websocket import create_connection
 
+
 @pytest.mark.skip(reason="Requires open-interpreter[local]")
 def test_m_vision():
     base64png = "iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAIAAADTED8xAAADMElEQVR4nOzVwQnAIBQFQYXff81RUkQCOyDj1YOPnbXWPmeTRef+/3O/OyBjzh3CD95BfqICMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMO0TAAD//2Anhf4QtqobAAAAAElFTkSuQmCC"
@@ -35,7 +36,7 @@ def test_m_vision():
     ]
 
     interpreter.llm.supports_vision = False
-    interpreter.llm.model = "gpt-4-turbo"
+    interpreter.llm.model = "gpt-4o"
     interpreter.llm.supports_functions = True
     interpreter.llm.context_window = 110000
     interpreter.llm.max_tokens = 4096
@@ -45,7 +46,9 @@ def test_m_vision():
 
     interpreter.force_task_completion = False
     import time
+
     time.sleep(10)
+
 
 @pytest.mark.skip(reason="Computer with display only + no way to fail test")
 def test_point():
@@ -70,7 +73,7 @@ def test_skills():
 
     import json
 
-    interpreter.llm.model = "gpt-4-turbo"
+    interpreter.llm.model = "gpt-4o"
 
     messages = ["USER: Hey can you search the web for me?\nAI: Sure!"]
 
@@ -324,7 +327,7 @@ def setup_function():
     interpreter.reset()
     interpreter.llm.temperature = 0
     interpreter.auto_run = True
-    interpreter.llm.model = "gpt-4-turbo"
+    interpreter.llm.model = "gpt-4o"
     interpreter.llm.context_window = 123000
     interpreter.llm.max_tokens = 4096
     interpreter.llm.supports_functions = True
