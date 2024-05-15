@@ -117,6 +117,7 @@ class Llm:
             function_calling=self.supports_functions,
             vision=self.supports_vision,
             shrink_images=self.interpreter.shrink_images,
+            interpreter=self.interpreter,
         )
 
         system_message = messages[0]["content"]
@@ -233,7 +234,7 @@ def fixed_litellm_completions(**params):
 
     if "local" in params.get("model"):
         # Kinda hacky, but this helps
-        params["stop"] = ["<|assistant|>", "<|end|>"]
+        params["stop"] = ["<|assistant|>", "<|end|>", "<|eot_id|>"]
 
     # Run completion
     first_error = None
