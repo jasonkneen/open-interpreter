@@ -32,7 +32,12 @@ def validate_llm_settings(interpreter):
             # Ensure API keys are set as environment variables
 
             # OpenAI
-            if interpreter.llm.model in litellm.open_ai_chat_completion_models:
+            if interpreter.llm.model in [
+                "gpt-4",
+                "gpt-3.5-turbo",
+                "gpt-40",
+                "gpt-4-turbo",
+            ]:
                 if (
                     not os.environ.get("OPENAI_API_KEY")
                     and not interpreter.llm.api_key
@@ -80,7 +85,7 @@ def validate_llm_settings(interpreter):
 
     # If we're here, we passed all the checks.
 
-    # Auto-run is for fast, light useage -- no messages.
+    # Auto-run is for fast, light usage -- no messages.
     # If offline, it's usually a bogus model name for LiteLLM since LM Studio doesn't require one.
     if not interpreter.auto_run and not interpreter.offline:
         display_markdown_message(f"> Model set to `{interpreter.llm.model}`")
