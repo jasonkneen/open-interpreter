@@ -1,6 +1,10 @@
+import os
+
+os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "True"
 import litellm
 
 litellm.suppress_debug_info = True
+import subprocess
 import time
 import uuid
 
@@ -72,6 +76,7 @@ class Llm:
             model = "openai/i"
             if not hasattr(self.interpreter, "conversation_id"):  # Only do this once
                 self.context_window = 7000
+                self.api_key = "x"
                 self.max_tokens = 1000
                 self.api_base = "https://api.openinterpreter.com/v0"
                 self.interpreter.conversation_id = str(uuid.uuid4())
@@ -117,12 +122,29 @@ class Llm:
         elif self.supports_vision == False and self.vision_renderer:
             for img_msg in image_messages:
                 if img_msg["format"] != "description":
+                    self.interpreter.display_message("\n  *Viewing image...*\n")
+
+                    if img_msg["format"] == "path":
+                        precursor = f"The image I'm referring to ({img_msg['content']}) contains the following: "
+                        if self.interpreter.computer.import_computer_api:
+                            postcursor = f"\nIf you want to ask questions about the image, run `computer.vision.query(path='{img_msg['content']}', query='(ask any question here)')` and a vision AI will answer it."
+                        else:
+                            postcursor = ""
+                    else:
+                        precursor = "Imagine I have just shown you an image with this description: "
+                        postcursor = ""
+
+                    image_description = self.vision_renderer(lmc=img_msg)
+
+                    # It would be nice to format this as a message to the user and display it like: "I see: image_description"
+
                     img_msg["content"] = (
-                        "Imagine I have just shown you an image with this description: "
-                        + self.vision_renderer(lmc=img_msg)
-                        + "\n---\nThe image contains the following text exactly, extracted via OCR: '''\n"
+                        precursor
+                        + image_description
+                        + "\n---\nThe image contains the following text exactly, which may or may not be relevant (if it's not relevant, ignore this): '''\n"
                         + self.interpreter.computer.vision.ocr(lmc=img_msg)
                         + "\n'''"
+                        + postcursor
                     )
                     img_msg["format"] = "description"
 
@@ -178,9 +200,9 @@ Continuing...
                                 """
 **We were unable to determine the context window of this model.** Defaulting to 3000.
 
-If your model can handle more, run `interpreter.llm.context_window = {token limit}`.
+If your model can handle more, run `self.context_window = {token limit}`.
 
-Also please set `interpreter.llm.max_tokens = {max tokens per response}`.
+Also please set `self.max_tokens = {max tokens per response}`.
 
 Continuing...
                             """
@@ -242,6 +264,46 @@ Continuing...
         else:
             yield from run_text_llm(self, params)
 
+    def load(self):
+        if self.model.startswith("ollama/"):
+            # WOAH we should also hit up ollama and set max_tokens and context_window based on the LLM. I think they let u do that
+
+            model_name = self.model.replace("ollama/", "")
+            try:
+                # List out all downloaded ollama models. Will fail if ollama isn't installed
+                result = subprocess.run(
+                    ["ollama", "list"], capture_output=True, text=True, check=True
+                )
+            except Exception as e:
+                print(str(e))
+                self.interpreter.display_message(
+                    f"> Ollama not found\n\nPlease download Ollama from [ollama.com](https://ollama.com/) to use `{model_name}`.\n"
+                )
+                exit()
+
+            lines = result.stdout.split("\n")
+            names = [
+                line.split()[0].replace(":latest", "")
+                for line in lines[1:]
+                if line.strip()
+            ]  # Extract names, trim out ":latest", skip header
+
+            if model_name not in names:
+                self.interpreter.display_message(f"\nDownloading {model_name}...\n")
+                subprocess.run(["ollama", "pull", model_name], check=True)
+
+            # Send a ping, which will actually load the model
+            print(f"\nLoading {model_name}...\n")
+
+            old_max_tokens = self.max_tokens
+            self.max_tokens = 1
+            self.interpreter.computer.ai.chat("ping")
+            self.max_tokens = old_max_tokens
+
+            # self.interpreter.display_message("\n*Model loaded.*\n")
+
+        # Validate LLM should be moved here!!
+
 
 def fixed_litellm_completions(**params):
     """
@@ -272,7 +334,7 @@ def fixed_litellm_completions(**params):
 
         if "api key" in str(first_error).lower() and "api_key" not in params:
             print(
-                "LiteLLM requires an API key. Please set a dummy API key to prevent this message. (e.g `interpreter --api_key x` or `interpreter.llm.api_key = 'x'`)"
+                "LiteLLM requires an API key. Please set a dummy API key to prevent this message. (e.g `interpreter --api_key x` or `self.api_key = 'x'`)"
             )
 
         # So, let's try one more time with a dummy API key:

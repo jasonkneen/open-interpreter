@@ -1,7 +1,9 @@
 import json
+import os
 import re
 import traceback
 
+os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "True"
 import litellm
 
 from ..terminal_interface.utils.display_markdown_message import display_markdown_message
@@ -196,7 +198,7 @@ def respond(interpreter):
                     code = re.sub(r"import computer\.\w+\n", "pass\n", code)
                     # If it does this it sees the screenshot twice (which is expected jupyter behavior)
                     if any(
-                        code.split("\n")[-1].startswith(text)
+                        code.strip().split("\n")[-1].startswith(text)
                         for text in [
                             "computer.display.view",
                             "computer.display.screenshot",

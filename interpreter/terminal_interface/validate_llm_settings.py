@@ -1,10 +1,13 @@
 """
 I do not like this and I want to get rid of it lol. Like, what is it doing..?
+I guess it's setting up the model. So maybe this should be like, interpreter.llm.load() soon!!!!!!!
 """
 
 import os
+import subprocess
 import time
 
+os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "True"
 import litellm
 from prompt_toolkit import prompt
 
@@ -89,6 +92,11 @@ def validate_llm_settings(interpreter):
     # If offline, it's usually a bogus model name for LiteLLM since LM Studio doesn't require one.
     if not interpreter.auto_run and not interpreter.offline:
         display_markdown_message(f"> Model set to `{interpreter.llm.model}`")
+
+    if interpreter.llm.model == "i":
+        interpreter.display_message(
+            "***Note:*** *Conversations with this model will be used to train our open-source model.*\n"
+        )
     return
 
 

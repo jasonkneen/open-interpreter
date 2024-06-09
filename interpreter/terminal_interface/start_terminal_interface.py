@@ -362,15 +362,25 @@ def start_terminal_interface(interpreter):
 
     if args.local:
         args.profile = "local.py"
+        if args.vision:
+            # This is local vision, set up moondream!
+            interpreter.computer.vision.load()
+        if args.os:
+            args.profile = "local-os.py"
 
     if args.codestral:
         args.profile = "codestral.py"
+        if args.vision:
+            args.profile = "codestral-vision.py"
+        if args.os:
+            args.profile = "codestral-os.py"
 
     if args.llama3:
         args.profile = "llama3.py"
-
-    if args.os and args.local:
-        args.profile = "local-os.py"
+        if args.vision:
+            args.profile = "llama3-vision.py"
+        if args.os:
+            args.profile = "llama3-os.py"
 
     ### Set attributes on interpreter, so that a profile script can read the arguments passed in via the CLI
 
@@ -493,7 +503,8 @@ def get_argument_dictionary(arguments: list[dict], key: str) -> dict:
 
 
 def main():
-    interpreter = OpenInterpreter(import_computer_api=True)
+    from interpreter import interpreter
+
     try:
         start_terminal_interface(interpreter)
     except KeyboardInterrupt:
@@ -517,18 +528,23 @@ def main():
                     else:
                         feedback = None
                     if feedback != None and not interpreter.contribute_conversation:
-                        contribute = (
-                            input(
-                                "\nThanks for your feedback! Would you like to send us this chat so we can improve? (y/n): "
+                        if interpreter.llm.model == "i":
+                            contribute = "y"
+                        else:
+                            print(
+                                "Thanks for your feedback! Would you like to send us this chat so we can improve?\n"
                             )
-                            .strip()
-                            .lower()
-                        )
+                            contribute = input("(y/n): ").strip().lower()
+
                         if contribute == "y":
                             interpreter.contribute_conversation = True
-                            print("Thank you for contributing!")
+                            interpreter.display_message(
+                                "\n*Thank you for contributing!*"
+                            )
 
-                if interpreter.contribute_conversation and interpreter.messages != []:
+                if (
+                    interpreter.contribute_conversation or interpreter.llm.model == "i"
+                ) and interpreter.messages != []:
                     conversation_id = (
                         interpreter.conversation_id
                         if hasattr(interpreter, "conversation_id")
