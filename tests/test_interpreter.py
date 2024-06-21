@@ -22,6 +22,21 @@ import pytest
 from websocket import create_connection
 
 
+@pytest.mark.skip(reason="Mac only")
+def test_sms():
+    sms = interpreter.computer.sms
+
+    # Get the last 5 messages
+    messages = sms.get(limit=5)
+    print(messages)
+
+    # Search messages for a substring
+    search_results = sms.get(substring="i love you", limit=100)
+    print(search_results)
+
+    assert False
+
+
 def test_ai_chat():
     print(interpreter.computer.ai.chat("hi"))
 
@@ -277,11 +292,11 @@ def test_m_vision():
     interpreter.llm.supports_functions = True
     interpreter.llm.context_window = 110000
     interpreter.llm.max_tokens = 4096
-    interpreter.force_task_completion = True
+    interpreter.loop = True
 
     interpreter.chat(messages)
 
-    interpreter.force_task_completion = False
+    interpreter.loop = False
     import time
 
     time.sleep(10)
@@ -580,7 +595,7 @@ def test_long_message():
             "role": "user",
             "type": "message",
             "content": "ALKI" * 20000
-            + "\nwhat are the four characters I just sent you? dont run ANY code, just tell me the characters. DO NOT RUN CODE. DO NOT PLAN. JUST TELL ME THE CHARACTERS RIGHT NOW. ONLY respond with the 4 characters, NOTHING else. The first 4 characters of your response should be the 4 characters I sent you.",
+            + "\nwhat are the four characters I just sent you? don't run ANY code, just tell me the characters. DO NOT RUN CODE. DO NOT PLAN. JUST TELL ME THE CHARACTERS RIGHT NOW. ONLY respond with the 4 characters, NOTHING else. The first 4 characters of your response should be the 4 characters I sent you.",
         }
     ]
     interpreter.llm.context_window = 300
@@ -632,11 +647,11 @@ def test_vision():
     interpreter.llm.supports_functions = False
     interpreter.llm.context_window = 110000
     interpreter.llm.max_tokens = 4096
-    interpreter.force_task_completion = True
+    interpreter.loop = True
 
     interpreter.chat(messages)
 
-    interpreter.force_task_completion = False
+    interpreter.loop = False
 
 
 def test_multiple_instances():

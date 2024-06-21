@@ -4,13 +4,18 @@ from ...utils.lazy_import import lazy_import
 
 # Lazy import of optional packages
 np = lazy_import("numpy")
-cv2 = lazy_import("cv2")
+try:
+    cv2 = lazy_import("cv2")
+except:
+    cv2 = None  # Fixes colab error
 PIL = lazy_import("PIL")
 # pytesseract is very very optional, we don't even recommend it unless the api has failed
 pytesseract = lazy_import("pytesseract")
 
 
 def pytesseract_get_text(img):
+    import pytesseract
+
     return pytesseract.image_to_string(img)
 
 
