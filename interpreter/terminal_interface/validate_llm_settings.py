@@ -1,10 +1,13 @@
 """
 I do not like this and I want to get rid of it lol. Like, what is it doing..?
+I guess it's setting up the model. So maybe this should be like, interpreter.llm.load() soon!!!!!!!
 """
 
 import os
+import subprocess
 import time
 
+os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "True"
 import litellm
 from prompt_toolkit import prompt
 
@@ -32,7 +35,12 @@ def validate_llm_settings(interpreter):
             # Ensure API keys are set as environment variables
 
             # OpenAI
-            if interpreter.llm.model in litellm.open_ai_chat_completion_models:
+            if interpreter.llm.model in [
+                "gpt-4",
+                "gpt-3.5-turbo",
+                "gpt-4o",
+                "gpt-4-turbo",
+            ]:
                 if (
                     not os.environ.get("OPENAI_API_KEY")
                     and not interpreter.llm.api_key
@@ -44,7 +52,7 @@ def validate_llm_settings(interpreter):
                         """---
                     > OpenAI API key not found
 
-                    To use `gpt-4o` (recommended) please provide an OpenAI API key.
+                    To use `gpt-4-turbo` (recommended) please provide an OpenAI API key.
 
                     To use another language model, run `interpreter --local` or consult the documentation at [docs.openinterpreter.com](https://docs.openinterpreter.com/language-model-setup/).
                     
@@ -80,10 +88,17 @@ def validate_llm_settings(interpreter):
 
     # If we're here, we passed all the checks.
 
-    # Auto-run is for fast, light useage -- no messages.
+    # Auto-run is for fast, light usage -- no messages.
     # If offline, it's usually a bogus model name for LiteLLM since LM Studio doesn't require one.
     if not interpreter.auto_run and not interpreter.offline:
         display_markdown_message(f"> Model set to `{interpreter.llm.model}`")
+
+    if interpreter.llm.model == "i":
+        interpreter.display_message(
+            "***Note:*** *Conversations with this model will be used to train our open-source model.*\n"
+        )
+    if "ollama" in interpreter.llm.model:
+        interpreter.llm.load()
     return
 
 

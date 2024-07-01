@@ -8,6 +8,7 @@ import time
 
 import inquirer
 import psutil
+import requests
 import wget
 
 
@@ -205,7 +206,7 @@ def local_setup(interpreter, provider=None, model=None):
     if selected_model == "LM Studio":
         interpreter.display_message(
             """
-    To use use Open Interpreter with **LM Studio**, you will need to run **LM Studio** in the background.
+    To use Open Interpreter with **LM Studio**, you will need to run **LM Studio** in the background.
 
     1. Download **LM Studio** from [https://lmstudio.ai/](https://lmstudio.ai/), then start it.
     2. Select a language model then click **Download**.
@@ -219,7 +220,7 @@ def local_setup(interpreter, provider=None, model=None):
         )
         interpreter.llm.supports_functions = False
         interpreter.llm.api_base = "http://localhost:1234/v1"
-        interpreter.llm.api_key = "x"
+        interpreter.llm.api_key = "dummy"
 
     elif selected_model == "Ollama":
         try:
@@ -234,9 +235,19 @@ def local_setup(interpreter, provider=None, model=None):
                 if line.strip()
             ]  # Extract names, trim out ":latest", skip header
 
-            for model in ["llama3", "phi3", "wizardlm2"]:
+            if "llama3" in names:
+                names.remove("llama3")
+                names = ["llama3"] + names
+
+            if "codestral" in names:
+                names.remove("codestral")
+                names = ["codestral"] + names
+
+            for model in ["llama3", "phi3", "wizardlm2", "codestral"]:
                 if model not in names:
-                    names.append("→ Download " + model)
+                    names.append("↓ Download " + model)
+
+            names.append("Browse Models ↗")
 
             # Create a new inquirer selection from the names
             name_question = [
@@ -253,15 +264,37 @@ def local_setup(interpreter, provider=None, model=None):
 
             selected_name = name_answer["name"]
 
-            if "download" in selected_name.lower():
+            if "↓ Download " in selected_name:
                 model = selected_name.split(" ")[-1]
                 interpreter.display_message(f"\nDownloading {model}...\n")
                 subprocess.run(["ollama", "pull", model], check=True)
+            elif "Browse Models ↗" in selected_name:
+                interpreter.display_message(
+                    "Opening [ollama.com/library](ollama.com/library)."
+                )
+                import webbrowser
+
+                webbrowser.open("https://ollama.com/library")
+                exit()
             else:
                 model = selected_name.strip()
 
             # Set the model to the selected model
             interpreter.llm.model = f"ollama/{model}"
+
+            # Send a ping, which will actually load the model
+            interpreter.display_message("Loading model...")
+
+            old_max_tokens = interpreter.llm.max_tokens
+            old_context_window = interpreter.llm.context_window
+            interpreter.llm.max_tokens = 1
+            interpreter.llm.context_window = 100
+
+            interpreter.computer.ai.chat("ping")
+
+            interpreter.llm.max_tokens = old_max_tokens
+            interpreter.llm.context_window = old_context_window
+
             interpreter.display_message(f"> Model set to `{model}`")
 
         # If Ollama is not installed or not recognized as a command, prompt the user to download Ollama and try again
@@ -277,7 +310,7 @@ def local_setup(interpreter, provider=None, model=None):
     elif selected_model == "Jan":
         interpreter.display_message(
             """
-    To use use Open Interpreter with **Jan**, you will need to run **Jan** in the background.
+    To use Open Interpreter with **Jan**, you will need to run **Jan** in the background.
 
     1. Download **Jan** from [https://jan.ai/](https://jan.ai/), then start it.
     2. Select a language model from the "Hub" tab, then click **Download**.
@@ -290,13 +323,22 @@ def local_setup(interpreter, provider=None, model=None):
     """
         )
         interpreter.llm.api_base = "http://localhost:1337/v1"
-        time.sleep(1)
+        # time.sleep(1)
 
-        # Prompt the user to enter the name of the model running on Jan
+        # Send a GET request to the Jan API to get the list of models
+        response = requests.get(f"{interpreter.llm.api_base}/models")
+        models = response.json()["data"]
+
+        # Extract the model ids from the response
+        model_ids = [model["id"] for model in models]
+        model_ids.insert(0, ">> Type Custom Model ID")
+
+        # Prompt the user to select a model from the list
         model_name_question = [
-            inquirer.Text(
+            inquirer.List(
                 "jan_model_name",
-                message="Enter the id of the model you have running on Jan",
+                message="Select the model you have running on Jan",
+                choices=model_ids,
             ),
         ]
         model_name_answer = inquirer.prompt(model_name_question)
@@ -305,9 +347,13 @@ def local_setup(interpreter, provider=None, model=None):
             exit()
 
         jan_model_name = model_name_answer["jan_model_name"]
-        interpreter.llm.model = f"jan/{jan_model_name}"
+        if jan_model_name == ">> Type Custom Model ID":
+            jan_model_name = input("Enter the custom model ID: ")
+
+        interpreter.llm.model = jan_model_name
+        interpreter.llm.api_key = "dummy"
         interpreter.display_message(f"\nUsing Jan model: `{jan_model_name}` \n")
-        time.sleep(1)
+        # time.sleep(1)
 
     elif selected_model == "Llamafile":
         if platform.system() == "Darwin":  # Check if the system is MacOS
@@ -370,7 +416,7 @@ def local_setup(interpreter, provider=None, model=None):
                     )
 
                     for line in process.stdout:
-                        if "llama server listening at http://127.0.0.1:8080" in line:
+                        if "llama server listening at " in line:
                             break  # Exit the loop once the server is ready
                 except Exception as e:
                     process.kill()  # Force kill if not terminated after timeout
@@ -379,6 +425,7 @@ def local_setup(interpreter, provider=None, model=None):
 
         # Set flags for Llamafile to work with interpreter
         interpreter.llm.model = "openai/local"
+        interpreter.llm.api_key = "dummy"
         interpreter.llm.temperature = 0
         interpreter.llm.api_base = "http://localhost:8080/v1"
         interpreter.llm.supports_functions = False
@@ -386,7 +433,7 @@ def local_setup(interpreter, provider=None, model=None):
         model_name = model_path.split("/")[-1]
         interpreter.display_message(f"> Model set to `{model_name}`")
 
-    user_ram = total_ram = psutil.virtual_memory().total / (
+    user_ram = psutil.virtual_memory().total / (
         1024 * 1024 * 1024
     )  # Convert bytes to GB
     # Set context window and max tokens for all local models based on the users available RAM

@@ -3,7 +3,7 @@ name = "open-interpreter"
 packages = [
     {include = "interpreter"},
 ]
-version = "0.2.5" # Use "-rc1", "-rc2", etc. for pre-release versions
+version = "0.3.4" # Use "-rc1", "-rc2", etc. for pre-release versions
 description = "Let language models run code"
 authors = ["Killian Lucas <killian@openinterpreter.com>"]
 readme = "README.md"
@@ -28,7 +28,6 @@ ipykernel = "^6.26.0"
 jupyter-client = "^8.6.0"
 matplotlib = "^3.8.2"
 toml = "^0.10.2"
-posthog = "^3.1.0"
 tiktoken = "^0.6.0"
 platformdirs = "^4.2.0"
 pydantic = "^2.6.4"
@@ -55,12 +54,19 @@ yaspin = { version = "^3.0.1", optional = true }
 transformers = { version = "^4.40.1", optional = true }
 einops = { version = "^0.8.0", optional = true }
 torchvision = { version = "^0.18.0", optional = true }
+easyocr = { version = "^1.7.1", optional = true }
+
+# Optional [server] dependencies
+fastapi = { version = "^0.111.0", optional = true }
+uvicorn = { version = "^0.30.1", optional = true }
+janus = { version = "^1.0.0", optional = true }
 
 sounddevice = "^0.4.7"
 [tool.poetry.extras]
 os = ["opencv-python", "pyautogui", "plyer", "pywinctl", "pytesseract", "sentence-transformers", "ipywidgets", "torch", "timm", "screeninfo"]
 safe = ["semgrep", "yaspin"]
-local = ["opencv-python", "pytesseract", "torch", "transformers", "einops", "torchvision"]
+local = ["opencv-python", "pytesseract", "torch", "transformers", "einops", "torchvision", "easyocr"]
+server = ["fastapi", "janus", "uvicorn"]
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.10.1"
@@ -76,6 +82,7 @@ build-backend = "poetry.core.masonry.api"
 [tool.poetry.scripts]
 interpreter = "interpreter.terminal_interface.start_terminal_interface:main"
 i = "interpreter.terminal_interface.start_terminal_interface:main"
+ibench = "benchmarks.simple:main"
 
 [tool.black]
 target-version = ['py311']

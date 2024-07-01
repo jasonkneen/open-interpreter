@@ -9,7 +9,6 @@ from interpreter.terminal_interface.contributing_conversations import (
     contribute_conversations,
 )
 
-from ..core.core import OpenInterpreter
 from .conversation_navigator import conversation_navigator
 from .profiles.profiles import open_storage_dir, profile, reset_profile
 from .utils.check_for_update import check_for_update
@@ -75,7 +74,7 @@ def start_terminal_interface(interpreter):
         {
             "name": "llm_supports_vision",
             "nickname": "lsv",
-            "help_text": "inform OI that your model supports vision, and can recieve vision inputs",
+            "help_text": "inform OI that your model supports vision, and can receive vision inputs",
             "type": bool,
             "action": argparse.BooleanOptionalAction,
             "attribute": {"object": interpreter.llm, "attr_name": "supports_vision"},
@@ -138,11 +137,10 @@ def start_terminal_interface(interpreter):
             "attribute": {"object": interpreter, "attr_name": "max_output"},
         },
         {
-            "name": "force_task_completion",
-            "nickname": "fc",
+            "name": "loop",
             "help_text": "runs OI in a loop, requiring it to admit to completing/failing task",
             "type": bool,
-            "attribute": {"object": interpreter, "attr_name": "force_task_completion"},
+            "attribute": {"object": interpreter, "attr_name": "loop"},
         },
         {
             "name": "disable_telemetry",
@@ -204,6 +202,11 @@ def start_terminal_interface(interpreter):
         {
             "name": "codestral",
             "help_text": "shortcut for `interpreter --profile codestral`",
+            "type": bool,
+        },
+        {
+            "name": "assistant",
+            "help_text": "shortcut for `interpreter --profile assistant.py`",
             "type": bool,
         },
         {
@@ -316,6 +319,12 @@ def start_terminal_interface(interpreter):
 
     args, unknown_args = parser.parse_known_args()
 
+    if args.server:
+        # Instead use an async interpreter, which has a server. Set settings on that
+        from interpreter import AsyncInterpreter
+
+        interpreter = AsyncInterpreter()
+
     # handle unknown arguments
     if unknown_args:
         print(f"\nUnrecognized argument(s): {unknown_args}")
@@ -341,7 +350,7 @@ def start_terminal_interface(interpreter):
 
     if args.version:
         version = pkg_resources.get_distribution("open-interpreter").version
-        update_name = "New Computer Update"  # Change this with each major update
+        update_name = "Local III"  # Change this with each major update
         print(f"Open Interpreter {version} {update_name}")
         return
 
@@ -350,6 +359,14 @@ def start_terminal_interface(interpreter):
         interpreter.safe_mode == "ask" or interpreter.safe_mode == "auto"
     ):
         setattr(interpreter, "auto_run", False)
+
+    ### Set attributes on interpreter, so that a profile script can read the arguments passed in via the CLI
+
+    set_attributes(args, arguments)
+
+    ### Apply profile
+
+    # Profile shortcuts, which should probably not exist:
 
     if args.fast:
         args.profile = "fast.yaml"
@@ -362,21 +379,28 @@ def start_terminal_interface(interpreter):
 
     if args.local:
         args.profile = "local.py"
+        if args.vision:
+            # This is local vision, set up moondream!
+            interpreter.computer.vision.load()
+        if args.os:
+            args.profile = "local-os.py"
 
     if args.codestral:
         args.profile = "codestral.py"
+        if args.vision:
+            args.profile = "codestral-vision.py"
+        if args.os:
+            args.profile = "codestral-os.py"
+
+    if args.assistant:
+        args.profile = "assistant.py"
 
     if args.llama3:
         args.profile = "llama3.py"
-
-    if args.os and args.local:
-        args.profile = "local-os.py"
-
-    ### Set attributes on interpreter, so that a profile script can read the arguments passed in via the CLI
-
-    set_attributes(args, arguments)
-
-    ### Apply profile
+        if args.vision:
+            args.profile = "llama3-vision.py"
+        if args.os:
+            args.profile = "llama3-os.py"
 
     interpreter = profile(
         interpreter,
@@ -452,13 +476,13 @@ def start_terminal_interface(interpreter):
         conversation_navigator(interpreter)
         return
 
-    if args.server:
-        interpreter.server()
-        print("Debug: Starting server...")
-        print(f"Debug: API base: {interpreter.llm.api_base}")
-        print(f"Debug: Model: {interpreter.llm.model}")
+    validate_llm_settings(
+        interpreter
+    )  # This should actually just run interpreter.llm.load() once that's == to validate_llm_settings
 
-    validate_llm_settings(interpreter)
+    if args.server:
+        interpreter.server.run()
+        return
 
     interpreter.in_terminal_interface = True
 
@@ -495,13 +519,56 @@ def get_argument_dictionary(arguments: list[dict], key: str) -> dict:
 
 
 def main():
-    interpreter = OpenInterpreter(import_computer_api=True)
+    from interpreter import interpreter
+
     try:
         start_terminal_interface(interpreter)
     except KeyboardInterrupt:
-        pass
+        try:
+            interpreter.computer.terminate()
+
+            if not interpreter.offline and not interpreter.disable_telemetry:
+                feedback = None
+                if len(interpreter.messages) > 3:
+                    feedback = (
+                        input("\n\nWas Open Interpreter helpful? (y/n): ")
+                        .strip()
+                        .lower()
+                    )
+                    if feedback == "y":
+                        feedback = True
+                    elif feedback == "n":
+                        feedback = False
+                    else:
+                        feedback = None
+                    if feedback != None and not interpreter.contribute_conversation:
+                        if interpreter.llm.model == "i":
+                            contribute = "y"
+                        else:
+                            print(
+                                "Thanks for your feedback! Would you like to send us this chat so we can improve?\n"
+                            )
+                            contribute = input("(y/n): ").strip().lower()
+
+                        if contribute == "y":
+                            interpreter.contribute_conversation = True
+                            interpreter.display_message(
+                                "\n*Thank you for contributing!*"
+                            )
+
+                if (
+                    interpreter.contribute_conversation or interpreter.llm.model == "i"
+                ) and interpreter.messages != []:
+                    conversation_id = (
+                        interpreter.conversation_id
+                        if hasattr(interpreter, "conversation_id")
+                        else None
+                    )
+                    contribute_conversations(
+                        [interpreter.messages], feedback, conversation_id
+                    )
+
+        except KeyboardInterrupt:
+            pass
     finally:
-        if interpreter.will_contribute:
-            contribute_conversations([interpreter.messages])
-            print("Thank you for contributing to our training data!")
         interpreter.computer.terminate()

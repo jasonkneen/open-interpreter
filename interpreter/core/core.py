@@ -20,12 +20,6 @@ from .respond import respond
 from .utils.telemetry import send_telemetry
 from .utils.truncate_output import truncate_output
 
-try:
-    from .server import server
-except:
-    # Dependencies for server are not generally required
-    pass
-
 
 class OpenInterpreter:
     """
@@ -55,9 +49,9 @@ class OpenInterpreter:
         max_output=2800,
         safe_mode="off",
         shrink_images=False,
-        force_task_completion=False,
-        force_task_completion_message="""Proceed. You CAN run code on my machine. If you want to run code, start your message with "```"! If the entire task I asked for is done, say exactly 'The task is done.' If you need some specific information (like username or password) say EXACTLY 'Please provide more information.' If it's impossible, say 'The task is impossible.' (If I haven't provided a task, say exactly 'Let me know what you'd like to do next.') Otherwise keep going.""",
-        force_task_completion_breakers=[
+        loop=False,
+        loop_message="""Proceed. You CAN run code on my machine. If you want to run code, start your message with "```"! If the entire task I asked for is done, say exactly 'The task is done.' If you need some specific information (like username or password) say EXACTLY 'Please provide more information.' If it's impossible, say 'The task is impossible.' (If I haven't provided a task, say exactly 'Let me know what you'd like to do next.') Otherwise keep going.""",
+        loop_breakers=[
             "The task is done.",
             "The task is impossible.",
             "Let me know what you'd like to do next.",
@@ -105,9 +99,9 @@ class OpenInterpreter:
         self.contribute_conversation = contribute_conversation
 
         # Loop messages
-        self.force_task_completion = force_task_completion
-        self.force_task_completion_message = force_task_completion_message
-        self.force_task_completion_breakers = force_task_completion_breakers
+        self.loop = loop
+        self.loop_message = loop_message
+        self.loop_breakers = loop_breakers
 
         # Conversation history
         self.conversation_history = conversation_history
@@ -140,9 +134,6 @@ class OpenInterpreter:
         self.code_output_template = code_output_template
         self.empty_code_output_template = empty_code_output_template
         self.code_output_sender = code_output_sender
-
-    def server(self, *args, **kwargs):
-        server(self, *args, **kwargs)
 
     def local_setup(self):
         """
@@ -308,6 +299,7 @@ class OpenInterpreter:
         Pulls from the respond stream, adding delimiters. Some things, like active_line, console, confirmation... these act specially.
         Also assembles new messages and adds them to `self.messages`.
         """
+        self.verbose = False
 
         # Utility function
         def is_active_line_chunk(chunk):
@@ -316,6 +308,10 @@ class OpenInterpreter:
         last_flag_base = None
 
         for chunk in respond(self):
+            # For async usage
+            if hasattr(self, "stop_event") and self.stop_event.is_set():
+                break
+
             if chunk["content"] == "":
                 continue
 
@@ -325,7 +321,10 @@ class OpenInterpreter:
                 if last_flag_base:
                     yield {**last_flag_base, "end": True}
                     last_flag_base = None
-                yield chunk
+
+                if self.auto_run == False:
+                    yield chunk
+
                 # We want to append this now, so even if content is never filled, we know that the execution didn't produce output.
                 # ... rethink this though.
                 self.messages.append(
@@ -364,7 +363,7 @@ class OpenInterpreter:
 
                 last_flag_base = {"role": chunk["role"], "type": chunk["type"]}
 
-                # Don't add format to type: "console" flags, to accomodate active_line AND output formats
+                # Don't add format to type: "console" flags, to accommodate active_line AND output formats
                 if "format" in chunk and chunk["type"] != "console":
                     last_flag_base["format"] = chunk["format"]
 
