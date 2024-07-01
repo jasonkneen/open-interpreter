@@ -238,4 +238,4 @@ litellm_uuid.txt
 .vscode/settings.json
 */utils/piper/*
 .vscode/launch.json
-*/piper
+*/piper/*

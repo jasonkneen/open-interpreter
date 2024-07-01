@@ -22,10 +22,11 @@ from .components.code_block import CodeBlock
 from .components.message_block import MessageBlock
 from .magic_commands import handle_magic_command
 from .utils.check_for_package import check_for_package
+from .utils.cli_input import cli_input
 from .utils.display_markdown_message import display_markdown_message
 from .utils.display_output import display_output
 from .utils.find_image_path import find_image_path
-from .utils.cli_input import cli_input
+from .utils.text_to_speech import text_to_speech
 
 # Add examples to the readline history
 examples = [
@@ -39,12 +40,18 @@ random.shuffle(examples)
 try:
     for example in examples:
         readline.add_history(example)
-except:
+except Exception:
     # If they don't have readline, that's fine
     pass
 
+assembled_sentence = ""
+
 
 def terminal_interface(interpreter, message):
+    """
+    This function serves as the terminal interface for the Open Interpreter.
+    It takes an interpreter object and a message as input and interacts with the user through the terminal.
+    """
     # Auto run and offline (this.. this isnt right) don't display messages.
     # Probably worth abstracting this to something like "debug_cli" at some point.
     if not interpreter.auto_run and not interpreter.offline:
@@ -75,7 +82,11 @@ def terminal_interface(interpreter, message):
     while True:
         if interactive:
             ### This is the primary input for Open Interpreter.
-            message = cli_input("> ").strip() if interpreter.multi_line else input("> ").strip()
+            message = (
+                cli_input("> ").strip()
+                if interpreter.multi_line
+                else input("> ").strip()
+            )
 
             try:
                 # This lets users hit the up arrow key for past messages
@@ -106,7 +117,10 @@ def terminal_interface(interpreter, message):
                 )
                 continue
 
-            if interpreter.llm.supports_vision or interpreter.llm.vision_renderer != None:
+            if (
+                interpreter.llm.supports_vision
+                or interpreter.llm.vision_renderer != None
+            ):
                 # Is the input a path to an image? Like they just dragged it into the terminal?
                 image_path = find_image_path(message)
 
@@ -131,6 +145,7 @@ def terminal_interface(interpreter, message):
 
         try:
             for chunk in interpreter.chat(message, display=False, stream=True):
+                global assembled_sentence
                 yield chunk
 
                 # Is this for thine eyes?
@@ -168,8 +183,20 @@ def terminal_interface(interpreter, message):
 
                     if "content" in chunk:
                         active_block.message += chunk["content"]
+                        # print(interpreter.speak_messages)
+                        if interpreter.speak_messages:
+                            assembled_sentence += chunk["content"]
+                            # Check if the assembled sentence ends with a sentence terminator
+                            if bool(re.search(r"[.!?-]|--$", assembled_sentence)):
+                                # Send the sentence to the text-to-speech function
+                                text_to_speech(
+                                    assembled_sentence, "openai"
+                                )  # text_to_speech(assembled_sentence)
+                                # subprocess.run(["say", assembled_sentence])
+                                # Reset the assembled sentence for the next chunks
+                                assembled_sentence = ""
 
-                    if "end" in chunk and interpreter.os:
+                    if "end" in chunk:
                         last_message = interpreter.messages[-1]["content"]
 
                         # Remove markdown lists and the line above markdown lists
@@ -195,22 +222,6 @@ def terminal_interface(interpreter, message):
                         # Display notification in OS mode
                         if interpreter.os:
                             interpreter.computer.os.notify(sanitized_message)
-
-                        # Speak message aloud
-                        if platform.system() == "Darwin" and interpreter.speak_messages:
-                            if voice_subprocess:
-                                voice_subprocess.terminate()
-                            voice_subprocess = subprocess.Popen(
-                                [
-                                    "osascript",
-                                    "-e",
-                                    f'say "{sanitized_message}" using "Fred"',
-                                ]
-                            )
-                        else:
-                            pass
-                            # User isn't on a Mac, so we can't do this. You should tell them something about that when they first set this up.
-                            # Or use a universal TTS library.
 
                 # Assistant code blocks
                 elif chunk["role"] == "assistant" and chunk["type"] == "code":
@@ -365,12 +376,15 @@ def terminal_interface(interpreter, message):
                                 # (unless we figure out how to do this AFTER taking the screenshot)
                                 # otherwise it will try to click this notification!
 
-                                if any(action.startswith(text) for text in [
-                                    "computer.screenshot",
-                                    "computer.display.screenshot",
-                                    "computer.display.view",
-                                    "computer.view"
-                                ]):
+                                if any(
+                                    action.startswith(text)
+                                    for text in [
+                                        "computer.screenshot",
+                                        "computer.display.screenshot",
+                                        "computer.display.view",
+                                        "computer.view",
+                                    ]
+                                ):
                                     description = "Viewing screen..."
                                 elif action == "computer.mouse.click()":
                                     description = "Clicking..."

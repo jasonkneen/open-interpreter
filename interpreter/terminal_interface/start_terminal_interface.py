@@ -454,7 +454,9 @@ def start_terminal_interface(interpreter):
 
     if args.server:
         interpreter.server()
-        return
+        print("Debug: Starting server...")
+        print(f"Debug: API base: {interpreter.llm.api_base}")
+        print(f"Debug: Model: {interpreter.llm.model}")
 
     validate_llm_settings(interpreter)
 

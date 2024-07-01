@@ -2378,11 +2378,11 @@ files = [
 [package.dependencies]
 numpy = [
     {version = ">=1.21.0", markers = "python_version == \"3.9\" and platform_system == \"Darwin\" and platform_machine == \"arm64\""},
+    {version = ">=1.26.0", markers = "python_version >= \"3.12\""},
+    {version = ">=1.23.5", markers = "python_version >= \"3.11\" and python_version < \"3.12\""},
     {version = ">=1.21.4", markers = "python_version >= \"3.10\" and platform_system == \"Darwin\" and python_version < \"3.11\""},
     {version = ">=1.21.2", markers = "platform_system != \"Darwin\" and python_version >= \"3.10\" and python_version < \"3.11\""},
     {version = ">=1.19.3", markers = "platform_system == \"Linux\" and platform_machine == \"aarch64\" and python_version >= \"3.8\" and python_version < \"3.10\" or python_version > \"3.9\" and python_version < \"3.10\" or python_version >= \"3.9\" and platform_system != \"Darwin\" and python_version < \"3.10\" or python_version >= \"3.9\" and platform_machine != \"arm64\" and python_version < \"3.10\""},
-    {version = ">=1.23.5", markers = "python_version >= \"3.11\" and python_version < \"3.12\""},
-    {version = ">=1.26.0", markers = "python_version >= \"3.12\""},
 ]
 
 [[package]]
@@ -6761,6 +6761,26 @@ files = [
 ]
 
 [[package]]
+name = "sounddevice"
+version = "0.4.7"
+description = "Play and Record Sound with Python"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "sounddevice-0.4.7-py3-none-any.whl", hash = "sha256:1c3f18bfa4d9a257f5715f2ab83f2c0eb412a09f3e6a9fa73720886ca88f6bc7"},
+    {file = "sounddevice-0.4.7-py3-none-macosx_10_6_x86_64.macosx_10_6_universal2.whl", hash = "sha256:d6ddfd341ad7412b14ca001f2c4dbf5fa2503bdc9eb15ad2c3105f6c260b698a"},
+    {file = "sounddevice-0.4.7-py3-none-win32.whl", hash = "sha256:1ec1df094c468a210113aa22c4f390d5b4d9c7a73e41a6cb6ecfec83db59b380"},
+    {file = "sounddevice-0.4.7-py3-none-win_amd64.whl", hash = "sha256:0c8b3543da1496f282b66a7bc54b755577ba638b1af06c146d4ac7f39d86b548"},
+    {file = "sounddevice-0.4.7.tar.gz", hash = "sha256:69b386818d50a2d518607d4b973442e8d524760c7cd6c8b8be03d8c98fc4bce7"},
+]
+
+[package.dependencies]
+CFFI = ">=1.0"
+
+[package.extras]
+numpy = ["NumPy"]
+
+[[package]]
 name = "stack-data"
 version = "0.6.3"
 description = "Extract data from python stack frames and tracebacks for informative displays"
@@ -7550,4 +7570,4 @@ safe = ["semgrep", "yaspin"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<4"
-content-hash = "7c2e042c2f20b046b1a7b08755d87941d7c3407501dd6150bf07206781a600bd"
+content-hash = "c7d034cab1507432beb3de056a54887d243fcdf40345f8c95c5518b0c3719e8a"

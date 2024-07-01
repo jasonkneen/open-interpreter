@@ -189,7 +189,7 @@ Open Interpreter uses [LiteLLM](https://docs.litellm.ai/docs/providers/) to conn
 You can change the model by setting the model parameter:
 
 ```shell
-interpreter --model gpt-3.5-turbo
+interpreter --model gpt-4o
 interpreter --model claude-2
 interpreter --model command-nightly
 ```
@@ -197,7 +197,7 @@ interpreter --model command-nightly
 In Python, set the model on the object:
 
 ```python
-interpreter.llm.model = "gpt-3.5-turbo"
+interpreter.llm.model = "gpt-4o"
 ```
 
 [Find the appropriate "model" string for your language model here.](https://docs.litellm.ai/docs/providers/)
