@@ -9,7 +9,6 @@ except ImportError:
     pass
 
 import os
-import platform
 import random
 import re
 import subprocess
@@ -49,11 +48,7 @@ assembled_sentence = ""
 
 
 def terminal_interface(interpreter, message):
-    """
-    This function serves as the terminal interface for the Open Interpreter.
-    It takes an interpreter object and a message as input and interacts with the user through the terminal.
-    """
-    # Auto run and offline (this.. this isnt right) don't display messages.
+    # Auto run and offline (this.. this isn't right) don't display messages.
     # Probably worth abstracting this to something like "debug_cli" at some point.
     # If (len(interpreter.messages) == 1), they probably used the advanced "i {command}" entry, so no message should be displayed.
     if (
@@ -111,7 +106,7 @@ def terminal_interface(interpreter, message):
                 pass
 
         if isinstance(message, str):
-            # This is for the terminal interface being used as a CLI — messages are strings.
+            # This is for the terminal interface being used as a CLI — messages are strings.
             # This won't fire if they're in the python package, display=True, and they passed in an array of messages (for example).
 
             if message == "":
@@ -136,276 +131,330 @@ def terminal_interface(interpreter, message):
                 interpreter.llm.supports_vision
                 or interpreter.llm.vision_renderer != None
             ):
-                # Is the input a path to an image? Like they just dragged it into the terminal?
-                image_path = find_image_path(message)
+                try:
+                    for chunk in interpreter.chat(message, display=False, stream=True):
+                        global assembled_sentence
+                        yield chunk
 
-                ## If we found an image, add it to the message
-                if image_path:
-                    # Add the text interpreter's message history
-                    interpreter.messages.append(
-                        {
-                            "role": "user",
-                            "type": "message",
-                            "content": message,
-                        }
-                    )
+                        # Is this for thine eyes?
+                        if "recipient" in chunk and chunk["recipient"] != "user":
+                            continue
 
-                    # Pass in the image to interpreter in a moment
-                    message = {
-                        "role": "user",
-                        "type": "image",
-                        "format": "path",
-                        "content": image_path,
-                    }
+                        if interpreter.verbose:
+                            print("Chunk in `terminal_interface`:", chunk)
 
-        try:
-            for chunk in interpreter.chat(message, display=False, stream=True):
-                global assembled_sentence
-                yield chunk
+                        # Comply with PyAutoGUI fail-safe for OS mode
+                        # so people can turn it off by moving their mouse to a corner
+                        if interpreter.os:
+                            if (
+                                chunk.get("format") == "output"
+                                and "failsafeexception" in chunk["content"].lower()
+                            ):
+                                print(
+                                    "Fail-safe triggered (mouse in one of the four corners)."
+                                )
+                                break
 
-                # Is this for thine eyes?
-                if "recipient" in chunk and chunk["recipient"] != "user":
-                    continue
+                        if chunk["type"] == "review" and chunk.get("content"):
+                            # Specialized models can emit a code review.
+                            print(chunk.get("content"), end="", flush=True)
 
-                if interpreter.verbose:
-                    print("Chunk in `terminal_interface`:", chunk)
+                        # Execution notice
+                        if chunk["type"] == "confirmation":
+                            if not interpreter.auto_run:
+                                # OI is about to execute code. The user wants to approve this
 
-                # Comply with PyAutoGUI fail-safe for OS mode
-                # so people can turn it off by moving their mouse to a corner
-                if interpreter.os:
-                    if (
-                        chunk.get("format") == "output"
-                        and "failsafeexception" in chunk["content"].lower()
-                    ):
-                        print("Fail-safe triggered (mouse in one of the four corners).")
-                        break
+                                # End the active code block so you can run input() below it
+                                if active_block and not interpreter.plain_text_display:
+                                    active_block.refresh(cursor=False)
+                                    active_block.end()
+                                    active_block = None
 
-                if chunk["type"] == "review" and chunk.get("content"):
-                    # Specialized models can emit a code review.
-                    print(chunk.get("content"), end="", flush=True)
+                                code_to_run = chunk["content"]
+                                language = code_to_run["format"]
+                                code = code_to_run["content"]
 
-                # Execution notice
-                if chunk["type"] == "confirmation":
-                    if not interpreter.auto_run:
-                        # OI is about to execute code. The user wants to approve this
+                                should_scan_code = False
 
-                        # End the active code block so you can run input() below it
-                        if active_block and not interpreter.plain_text_display:
+                                if not interpreter.safe_mode == "off":
+                                    if interpreter.safe_mode == "auto":
+                                        should_scan_code = True
+                                    elif interpreter.safe_mode == "ask":
+                                        response = input(
+                                            "  Would you like to scan this code? (y/n)\n\n  "
+                                        )
+                                        print("")  # <- Aesthetic choice
+
+                                        if response.strip().lower() == "y":
+                                            should_scan_code = True
+
+                                if should_scan_code:
+                                    scan_code(code, language, interpreter)
+
+                                if interpreter.plain_text_display:
+                                    response = input(
+                                        "Would you like to run this code? (y/n)\n\n"
+                                    )
+                                else:
+                                    response = input(
+                                        "  Would you like to run this code? (y/n)\n\n  "
+                                    )
+                                print("")  # <- Aesthetic choice
+
+                                if response.strip().lower() == "y":
+                                    # Create a new, identical block where the code will actually be run
+                                    # Conveniently, the chunk includes everything we need to do this:
+                                    active_block = CodeBlock(interpreter)
+                                    active_block.margin_top = (
+                                        False  # <- Aesthetic choice
+                                    )
+                                    active_block.language = language
+                                    active_block.code = code
+                                elif response.strip().lower() == "e":
+                                    # Edit
+
+                                    # Create a temporary file
+                                    with tempfile.NamedTemporaryFile(
+                                        suffix=".tmp", delete=False
+                                    ) as tf:
+                                        tf.write(code.encode())
+                                        tf.flush()
+
+                                    # Open the temporary file with the default editor
+                                    subprocess.call(
+                                        [os.environ.get("EDITOR", "vim"), tf.name]
+                                    )
+
+                                    # Read the modified code
+                                    with open(tf.name, "r") as tf:
+                                        code = tf.read()
+
+                                    interpreter.messages[-1][
+                                        "content"
+                                    ] = code  # Give it code
+
+                                    # Delete the temporary file
+                                    os.unlink(tf.name)
+                                    active_block = CodeBlock()
+                                    active_block.margin_top = (
+                                        False  # <- Aesthetic choice
+                                    )
+                                    active_block.language = language
+                                    active_block.code = code
+                                else:
+                                    # User declined to run code.
+                                    interpreter.messages.append(
+                                        {
+                                            "role": "user",
+                                            "type": "message",
+                                            "content": "I have declined to run this code.",
+                                        }
+                                    )
+                                    break
+
+                        # Plain text mode
+                        if interpreter.plain_text_display:
+                            if "start" in chunk or "end" in chunk:
+                                print("\n")
+                            if (
+                                chunk["type"] in ["code", "console"]
+                                and "format" in chunk
+                            ):
+                                if "start" in chunk:
+                                    print("\n---\n\n```" + chunk["format"], flush=True)
+                                if "end" in chunk:
+                                    print("\n```\n\n---\n\n", flush=True)
+                            if chunk.get("format") != "active_line":
+                                print(chunk.get("content", ""), end="", flush=True)
+                            continue
+
+                        if "end" in chunk and active_block:
                             active_block.refresh(cursor=False)
+
+                        if chunk["type"] in [
+                            "message",
+                            "console",
+                        ]:  # We don't stop on code's end — code + console output are actually one block.
                             active_block.end()
                             active_block = None
 
-                        code_to_run = chunk["content"]
-                        language = code_to_run["format"]
-                        code = code_to_run["content"]
+                        # Assistant message blocks
+                        if chunk["type"] == "message":
+                            if "start" in chunk:
+                                active_block = MessageBlock()
+                                render_cursor = True
 
-                        should_scan_code = False
+                            if "content" in chunk:
+                                active_block.message += chunk["content"]
+                                # print(interpreter.speak_messages)
+                                if interpreter.speak_messages:
+                                    assembled_sentence += chunk["content"]
+                                    # Check if the assembled sentence ends with a sentence terminator
+                                    if bool(
+                                        re.search(r"[.!?-]|--$", assembled_sentence)
+                                    ):
+                                        # Send the sentence to the text-to-speech function
+                                        text_to_speech(
+                                            assembled_sentence, "openai"
+                                        )  # text_to_speech(assembled_sentence)
+                                        # subprocess.run(["say", assembled_sentence])
+                                        # Reset the assembled sentence for the next chunks
+                                        assembled_sentence = ""
 
-                        if not interpreter.safe_mode == "off":
-                            if interpreter.safe_mode == "auto":
-                                should_scan_code = True
-                            elif interpreter.safe_mode == "ask":
+                            if "end" in chunk:
+                                last_message = interpreter.messages[-1]["content"]
+
+                                # Remove markdown lists and the line above markdown lists
+                                lines = last_message.split("\n")
+                                i = 0
+                                while i < len(lines):
+                                    # Match markdown lists starting with hyphen, asterisk or number
+                                    if re.match(r"^\s*([-*]|\d+\.)\s", lines[i]):
+                                        del lines[i]
+                                        if i > 0:
+                                            del lines[i - 1]
+                                            i -= 1
+                                    else:
+                                        i += 1
+                                message = "\n".join(lines)
+                                # Replace newlines with spaces, escape double quotes and backslashes
+                                sanitized_message = (
+                                    message.replace("\\", "\\\\")
+                                    .replace("\n", " ")
+                                    .replace('"', '\\"')
+                                )
+
+                                # Display notification in OS mode
+                                interpreter.computer.os.notify(sanitized_message)
+
+                        # Assistant code blocks
+                        elif chunk["role"] == "assistant" and chunk["type"] == "code":
+                            if "start" in chunk:
+                                active_block = CodeBlock()
+                                active_block.language = chunk["format"]
+                                render_cursor = True
+
+                            if "content" in chunk:
+                                active_block.code += chunk["content"]
+
+                                # Execution notice
+                                if chunk["type"] == "confirmation":
+                                    if not interpreter.auto_run:
+                                        # OI is about to execute code. The user wants to approve this
+
+                                        # End the active code block so you can run input() below it
+                                        if active_block:
+                                            active_block.refresh(cursor=False)
+                                            active_block.end()
+                                            active_block = None
+
+                                            code_to_run = chunk["content"]
+                                            language = code_to_run["format"]
+                                            code = code_to_run["content"]
+
+                                            should_scan_code = False
+
+                                if not interpreter.safe_mode == "off":
+                                    if interpreter.safe_mode == "auto":
+                                        should_scan_code = True
+                                    elif interpreter.safe_mode == "ask":
+                                        response = input(
+                                            "  Would you like to scan this code? (y/n)\n\n  "
+                                        )
+                                        print("")  # <- Aesthetic choice
+
+                                        if response.strip().lower() == "y":
+                                            should_scan_code = True
+
+                                if should_scan_code:
+                                    scan_code(code, language, interpreter)
+
                                 response = input(
-                                    "  Would you like to scan this code? (y/n)\n\n  "
+                                    "  Would you like to run this code? (y/n)\n\n  "
                                 )
                                 print("")  # <- Aesthetic choice
 
                                 if response.strip().lower() == "y":
-                                    should_scan_code = True
+                                    # Create a new, identical block where the code will actually be run
+                                    # Conveniently, the chunk includes everything we need to do this:
+                                    active_block = CodeBlock()
+                                    active_block.margin_top = (
+                                        False  # <- Aesthetic choice
+                                    )
+                                    active_block.language = language
+                                    active_block.code = code
+                                else:
+                                    # User declined to run code.
+                                    interpreter.messages.append(
+                                        {
+                                            "role": "user",
+                                            "type": "message",
+                                            "content": "I have declined to run this code.",
+                                        }
+                                    )
+                                    break
 
-                        if should_scan_code:
-                            scan_code(code, language, interpreter)
-
-                        if interpreter.plain_text_display:
-                            response = input(
-                                "Would you like to run this code? (y/n)\n\n"
+                        # Computer can display visual types to user,
+                        # Which sometimes creates more computer output (e.g. HTML errors, eventually)
+                        if (
+                            chunk["role"] == "computer"
+                            and "content" in chunk
+                            and (
+                                chunk["type"] == "image"
+                                or ("format" in chunk and chunk["format"] == "html")
+                                or (
+                                    "format" in chunk
+                                    and chunk["format"] == "javascript"
+                                )
                             )
-                        else:
-                            response = input(
-                                "  Would you like to run this code? (y/n)\n\n  "
-                            )
-                        print("")  # <- Aesthetic choice
+                        ):
+                            if (interpreter.os == True) and (
+                                interpreter.verbose == False
+                            ):
+                                # We don't display things to the user in OS control mode, since we use vision to communicate the screen to the LLM so much.
+                                # But if verbose is true, we do display it!
+                                continue
 
-                        if response.strip().lower() == "y":
-                            # Create a new, identical block where the code will actually be run
-                            # Conveniently, the chunk includes everything we need to do this:
-                            active_block = CodeBlock(interpreter)
-                            active_block.margin_top = False  # <- Aesthetic choice
-                            active_block.language = language
-                            active_block.code = code
-                        elif response.strip().lower() == "e":
-                            # Edit
+                            # Display and give extra output back to the LLM
+                            extra_computer_output = display_output(chunk)
 
-                            # Create a temporary file
-                            with tempfile.NamedTemporaryFile(
-                                suffix=".tmp", delete=False
-                            ) as tf:
-                                tf.write(code.encode())
-                                tf.flush()
+                            # We're going to just add it to the messages directly, not changing `recipient` here.
+                            # Mind you, the way we're doing this, this would make it appear to the user if they look at their conversation history,
+                            # because we're not adding "recipient: assistant" to this block. But this is a good simple solution IMO.
+                            # we just might want to change it in the future, once we're sure that a bunch of adjacent type:console blocks will be rendered normally to text-only LLMs
+                            # and that if we made a new block here with "recipient: assistant" it wouldn't add new console outputs to that block (thus hiding them from the user)
 
-                            # Open the temporary file with the default editor
-                            subprocess.call([os.environ.get("EDITOR", "vim"), tf.name])
-
-                            # Read the modified code
-                            with open(tf.name, "r") as tf:
-                                code = tf.read()
-
-                            interpreter.messages[-1]["content"] = code  # Give it code
-
-                            # Delete the temporary file
-                            os.unlink(tf.name)
-                            active_block = CodeBlock()
-                            active_block.margin_top = False  # <- Aesthetic choice
-                            active_block.language = language
-                            active_block.code = code
-                        else:
-                            # User declined to run code.
-                            interpreter.messages.append(
-                                {
-                                    "role": "user",
-                                    "type": "message",
-                                    "content": "I have declined to run this code.",
-                                }
-                            )
-                            break
-
-                # Plain text mode
-                if interpreter.plain_text_display:
-                    if "start" in chunk or "end" in chunk:
-                        print("\n")
-                    if chunk["type"] in ["code", "console"] and "format" in chunk:
-                        if "start" in chunk:
-                            print("\n---\n\n```" + chunk["format"], flush=True)
-                        if "end" in chunk:
-                            print("\n```\n\n---\n\n", flush=True)
-                    if chunk.get("format") != "active_line":
-                        print(chunk.get("content", ""), end="", flush=True)
-                    continue
-
-                if "end" in chunk and active_block:
-                    active_block.refresh(cursor=False)
-
-                    if chunk["type"] in [
-                        "message",
-                        "console",
-                    ]:  # We don't stop on code's end — code + console output are actually one block.
-                        active_block.end()
-                        active_block = None
-
-                # Assistant message blocks
-                if chunk["type"] == "message":
-                    if "start" in chunk:
-                        active_block = MessageBlock()
-                        render_cursor = True
-
-                    if "content" in chunk:
-                        active_block.message += chunk["content"]
-                        # print(interpreter.speak_messages)
-                        if interpreter.speak_messages:
-                            assembled_sentence += chunk["content"]
-                            # Check if the assembled sentence ends with a sentence terminator
-                            if bool(re.search(r"[.!?-]|--$", assembled_sentence)):
-                                # Send the sentence to the text-to-speech function
-                                text_to_speech(
-                                    assembled_sentence, "openai"
-                                )  # text_to_speech(assembled_sentence)
-                                # subprocess.run(["say", assembled_sentence])
-                                # Reset the assembled sentence for the next chunks
-                                assembled_sentence = ""
-
-                    if "end" in chunk:
-                        last_message = interpreter.messages[-1]["content"]
-
-                        # Remove markdown lists and the line above markdown lists
-                        lines = last_message.split("\n")
-                        i = 0
-                        while i < len(lines):
-                            # Match markdown lists starting with hyphen, asterisk or number
-                            if re.match(r"^\s*([-*]|\d+\.)\s", lines[i]):
-                                del lines[i]
-                                if i > 0:
-                                    del lines[i - 1]
-                                    i -= 1
+                            if (
+                                interpreter.messages[-1].get("format") != "output"
+                                or interpreter.messages[-1]["role"] != "computer"
+                                or interpreter.messages[-1]["type"] != "console"
+                            ):
+                                # If the last message isn't a console output, make a new block
+                                interpreter.messages.append(
+                                    {
+                                        "role": "computer",
+                                        "type": "console",
+                                        "format": "output",
+                                        "content": extra_computer_output,
+                                    }
+                                )
                             else:
-                                i += 1
-                        message = "\n".join(lines)
-                        # Replace newlines with spaces, escape double quotes and backslashes
-                        sanitized_message = (
-                            message.replace("\\", "\\\\")
-                            .replace("\n", " ")
-                            .replace('"', '\\"')
-                        )
+                                # If the last message is a console output, simply append the extra output to it
+                                interpreter.messages[-1]["content"] += (
+                                    "\n" + extra_computer_output
+                                )
+                                interpreter.messages[-1][
+                                    "content"
+                                ] = interpreter.messages[-1]["content"].strip()
 
-                        # Display notification in OS mode
-                        if interpreter.os:
-                            interpreter.computer.os.notify(sanitized_message)
-
-                # Assistant code blocks
-                elif chunk["role"] == "assistant" and chunk["type"] == "code":
-                    if "start" in chunk:
-                        active_block = CodeBlock()
-                        active_block.language = chunk["format"]
-                        render_cursor = True
-
-                    if "content" in chunk:
-                        active_block.code += chunk["content"]
-
-                # Computer can display visual types to user,
-                # Which sometimes creates more computer output (e.g. HTML errors, eventually)
-                if (
-                    chunk["role"] == "computer"
-                    and "content" in chunk
-                    and (
-                        chunk["type"] == "image"
-                        or ("format" in chunk and chunk["format"] == "html")
-                        or ("format" in chunk and chunk["format"] == "javascript")
-                    )
-                ):
-                    if interpreter.os and interpreter.verbose == False:
-                        # We don't display things to the user in OS control mode, since we use vision to communicate the screen to the LLM so much.
-                        # But if verbose is true, we do display it!
-                        continue
-
-                    # Display and give extra output back to the LLM
-                    extra_computer_output = display_output(chunk)
-
-                    # We're going to just add it to the messages directly, not changing `recipient` here.
-                    # Mind you, the way we're doing this, this would make it appear to the user if they look at their conversation history,
-                    # because we're not adding "recipient: assistant" to this block. But this is a good simple solution IMO.
-                    # we just might want to change it in the future, once we're sure that a bunch of adjacent type:console blocks will be rendered normally to text-only LLMs
-                    # and that if we made a new block here with "recipient: assistant" it wouldn't add new console outputs to that block (thus hiding them from the user)
-
-                    if (
-                        interpreter.messages[-1].get("format") != "output"
-                        or interpreter.messages[-1]["role"] != "computer"
-                        or interpreter.messages[-1]["type"] != "console"
-                    ):
-                        # If the last message isn't a console output, make a new block
-                        interpreter.messages.append(
-                            {
-                                "role": "computer",
-                                "type": "console",
-                                "format": "output",
-                                "content": extra_computer_output,
-                            }
-                        )
-                    else:
-                        # If the last message is a console output, simply append the extra output to it
-                        interpreter.messages[-1]["content"] += (
-                            "\n" + extra_computer_output
-                        )
-                        interpreter.messages[-1]["content"] = interpreter.messages[-1][
-                            "content"
-                        ].strip()
-
-                # Console
-                if chunk["type"] == "console":
-                    render_cursor = False
-                    if "format" in chunk and chunk["format"] == "output":
-                        active_block.output += "\n" + chunk["content"]
-                        active_block.output = (
-                            active_block.output.strip()
-                        )  # ^ Aesthetic choice
+                        # Console
+                        if chunk["type"] == "console":
+                            render_cursor = False
+                            if "format" in chunk and chunk["format"] == "output":
+                                active_block.output += "\n" + chunk["content"]
+                                active_block.output = (
+                                    active_block.output.strip()
+                                )  # ^ Aesthetic choice
 
                         # Truncate output
                         active_block.output = truncate_output(
@@ -413,10 +462,10 @@ def terminal_interface(interpreter, message):
                             interpreter.max_output,
                             add_scrollbars=False,
                         )  # ^ Notice that this doesn't add the "scrollbars" line, which I think is fine
-                    if "format" in chunk and chunk["format"] == "active_line":
-                        active_block.active_line = chunk["content"]
+                        if "format" in chunk and chunk["format"] == "active_line":
+                            active_block.active_line = chunk["content"]
 
-                        # Display action notifications if we're in OS mode
+                            # Display action notifications if we're in OS mode
                         if interpreter.os and active_block.active_line != None:
                             action = ""
 
@@ -481,39 +530,39 @@ def terminal_interface(interpreter, message):
                                 if description:
                                     interpreter.computer.os.notify(description)
 
-                    if "start" in chunk:
-                        # We need to make a code block if we pushed out an HTML block first, which would have closed our code block.
-                        if not isinstance(active_block, CodeBlock):
-                            if active_block:
-                                active_block.end()
-                            active_block = CodeBlock()
+                        if "start" in chunk:
+                            # We need to make a code block if we pushed out an HTML block first, which would have closed our code block.
+                            if not isinstance(active_block, CodeBlock):
+                                if active_block:
+                                    active_block.end()
+                                active_block = CodeBlock()
 
-                if active_block:
-                    active_block.refresh(cursor=render_cursor)
+                    if active_block:
+                        active_block.refresh(cursor=render_cursor)
 
-            # (Sometimes -- like if they CTRL-C quickly -- active_block is still None here)
-            if "active_block" in locals():
-                if active_block:
-                    active_block.end()
-                    active_block = None
-                    time.sleep(0.1)
+                    # (Sometimes -- like if they CTRL-C quickly -- active_block is still None here)
+                    if "active_block" in locals():
+                        if active_block:
+                            active_block.end()
+                            active_block = None
+                            time.sleep(0.1)
 
-            if not interactive:
-                # Don't loop
-                break
+                    if not interactive:
+                        # Don't loop
+                        break
 
-        except KeyboardInterrupt:
-            # Exit gracefully
-            if "active_block" in locals() and active_block:
-                active_block.end()
-                active_block = None
+                except KeyboardInterrupt:
+                    # Exit gracefully
+                    if "active_block" in locals() and active_block:
+                        active_block.end()
+                        active_block = None
 
-            if interactive:
-                # (this cancels LLM, returns to the interactive "> " input)
-                continue
-            else:
-                break
-        except:
-            if interpreter.debug:
-                system_info(interpreter)
-            raise
+                    if interactive:
+                        # (this cancels LLM, returns to the interactive "> " input)
+                        continue
+                    else:
+                        break
+                except:
+                    if interpreter.debug:
+                        system_info(interpreter)
+                    raise

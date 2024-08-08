@@ -83,7 +83,7 @@ def generate_with_piper(message):
 
     script_path = os.path.abspath(__file__)
     script_dir = os.path.dirname(script_path)
-    piper_path = os.path.join(script_dir, "piper", "piper")
+    piper_path = os.path.join(script_dir, "piper")
     model_path = os.path.join(script_dir, "piper", "en_US-lessac-medium.onnx")
     run_args = f"echo {escaped_message} | {piper_path} --model {model_path} --voice 'adam' --output_file '{temp_path}'  -q"
 
