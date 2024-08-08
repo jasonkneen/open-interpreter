@@ -197,7 +197,7 @@ def terminal_interface(interpreter, message):
                                     )
                                 else:
                                     response = input(
-                                        "  Would you like to run this code? (y/n)\n\n  "
+                                        "  Wsould you like to run this code? (y/n)\n\n  "
                                     )
                                 print("")  # <- Aesthetic choice
 
