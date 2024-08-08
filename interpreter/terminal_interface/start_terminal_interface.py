@@ -1,4 +1,5 @@
 import argparse
+import os
 import sys
 import time
 
@@ -49,6 +50,14 @@ def start_terminal_interface(interpreter):
             "help_text": "automatically run generated code",
             "type": bool,
             "attribute": {"object": interpreter, "attr_name": "auto_run"},
+        },
+        {
+            "name": "no_highlight_active_line",
+            "nickname": "nhl",
+            "help_text": "turn off active line highlighting in code blocks",
+            "type": bool,
+            "action": "store_true",
+            "default": False,  # Default to False, meaning highlighting is on by default
         },
         {
             "name": "verbose",
@@ -215,6 +224,11 @@ def start_terminal_interface(interpreter):
             "type": bool,
         },
         {
+            "name": "groq",
+            "help_text": "shortcut for `interpreter --profile groq`",
+            "type": bool,
+        },
+        {
             "name": "vision",
             "nickname": "vi",
             "help_text": "experimentally use vision for supported languages (shortcut for `interpreter --profile vision`)",
@@ -264,7 +278,35 @@ def start_terminal_interface(interpreter):
                 "attr_name": "contribute_conversation",
             },
         },
+        {
+            "name": "plain",
+            "nickname": "pl",
+            "help_text": "set output to plain text",
+            "type": bool,
+            "attribute": {
+                "object": interpreter,
+                "attr_name": "plain_text_display",
+            },
+        },
     ]
+
+    # i shortcut
+    if len(sys.argv) > 1 and not sys.argv[1].startswith("-"):
+        message = " ".join(sys.argv[1:])
+        interpreter.messages.append(
+            {"role": "user", "type": "message", "content": "I " + message}
+        )
+        sys.argv = sys.argv[:1]
+
+        interpreter.custom_instructions = "UPDATED INSTRUCTIONS: You are in ULTRA FAST, ULTRA CERTAIN mode. Do not ask the user any questions or run code to gathet information. Go as quickly as you can. Run code quickly. Do not plan out loud, simply start doing the best thing. The user expects speed. Trust that the user knows best. Just interpret their ambiguous command as quickly and certainly as possible and try to fulfill it IN ONE COMMAND, assuming they have the right information. If they tell you do to something, just do it quickly in one command, DO NOT try to get more information (for example by running `cat` to get a file's infomration— this is probably unecessary!). DIRECTLY DO THINGS AS FAST AS POSSIBLE."
+
+        files_in_directory = os.listdir()[:100]
+        interpreter.custom_instructions += (
+            "\nThe files in CWD, which THE USER MAY BE REFERRING TO, are: "
+            + ", ".join(files_in_directory)
+        )
+
+        # interpreter.debug = True
 
     # Check for deprecated flags before parsing arguments
     deprecated_flags = {
@@ -278,7 +320,17 @@ def start_terminal_interface(interpreter):
             sys.argv.remove(old_flag)
             sys.argv.append(new_flag)
 
-    parser = argparse.ArgumentParser(
+    class CustomHelpParser(argparse.ArgumentParser):
+        def print_help(self, *args, **kwargs):
+            super().print_help(*args, **kwargs)
+            special_help_message = '''
+Open Interpreter, 2024
+
+Use """ to write multi-line messages.
+            '''
+            print(special_help_message)
+
+    parser = CustomHelpParser(
         description="Open Interpreter", usage="%(prog)s [options]"
     )
 
@@ -354,6 +406,9 @@ def start_terminal_interface(interpreter):
         print(f"Open Interpreter {version} {update_name}")
         return
 
+    if args.no_highlight_active_line:
+        interpreter.highlight_active_line = False
+
     # if safe_mode and auto_run are enabled, safe_mode disables auto_run
     if interpreter.auto_run and (
         interpreter.safe_mode == "ask" or interpreter.safe_mode == "auto"
@@ -401,6 +456,9 @@ def start_terminal_interface(interpreter):
             args.profile = "llama3-vision.py"
         if args.os:
             args.profile = "llama3-os.py"
+
+    if args.groq:
+        args.profile = "groq.py"
 
     interpreter = profile(
         interpreter,
@@ -476,9 +534,12 @@ def start_terminal_interface(interpreter):
         conversation_navigator(interpreter)
         return
 
-    validate_llm_settings(
-        interpreter
-    )  # This should actually just run interpreter.llm.load() once that's == to validate_llm_settings
+    if not args.server:
+        # This SHOULD RUN WHEN THE SERVER STARTS. But it can't rn because
+        # if you don't have an API key, a prompt shows up, breaking the whole thing.
+        validate_llm_settings(
+            interpreter
+        )  # This should actually just run interpreter.llm.load() once that's == to validate_llm_settings
 
     if args.server:
         interpreter.server.run()
@@ -546,14 +607,14 @@ def main():
                             contribute = "y"
                         else:
                             print(
-                                "Thanks for your feedback! Would you like to send us this chat so we can improve?\n"
+                                "\nThanks for your feedback! Would you like to send us this chat so we can improve?\n"
                             )
                             contribute = input("(y/n): ").strip().lower()
 
                         if contribute == "y":
                             interpreter.contribute_conversation = True
                             interpreter.display_message(
-                                "\n*Thank you for contributing!*"
+                                "\n*Thank you for contributing!*\n"
                             )
 
                 if (

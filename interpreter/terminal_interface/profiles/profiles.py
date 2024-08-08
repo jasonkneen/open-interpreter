@@ -563,6 +563,10 @@ version: {OI_VERSION}  # Profile version (do not modify)
 def apply_profile_to_object(obj, profile):
     for key, value in profile.items():
         if isinstance(value, dict):
+            if (
+                key == "wtf"
+            ):  # The wtf command has a special part of the profile, not used here
+                continue
             apply_profile_to_object(getattr(obj, key), value)
         else:
             setattr(obj, key, value)
