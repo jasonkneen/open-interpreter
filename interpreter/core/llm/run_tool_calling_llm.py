@@ -1,3 +1,4 @@
+import os
 import re
 
 from .utils.merge_deltas import merge_deltas
@@ -248,13 +249,33 @@ def run_tool_calling_llm(llm, request_params):
 
         if (
             accumulated_deltas.get("function_call")
+            and "name" in accumulated_deltas["function_call"]
+            and (
+                accumulated_deltas["function_call"]["name"] == "python"
+                or accumulated_deltas["function_call"]["name"] == "functions"
+            )
+        ):
+            if language is None:
+                language = "python"
+
+            # Pull the code string straight out of the "arguments" string
+            code_delta = accumulated_deltas["function_call"]["arguments"][len(code) :]
+            # Update the code
+            code = accumulated_deltas["function_call"]["arguments"]
+            # Yield the delta
+            if code_delta:
+                yield {
+                    "type": "code",
+                    "format": language,
+                    "content": code_delta,
+                }
+
+        if (
+            accumulated_deltas.get("function_call")
             and "arguments" in accumulated_deltas["function_call"]
             and accumulated_deltas["function_call"]["arguments"]
         ):
-            if (
-                "name" in accumulated_deltas["function_call"]
-                and accumulated_deltas["function_call"]["name"] == "execute"
-            ):
+            if "arguments" in accumulated_deltas["function_call"]:
                 arguments = accumulated_deltas["function_call"]["arguments"]
                 arguments = parse_partial_json(arguments)
 
@@ -284,37 +305,11 @@ def run_tool_calling_llm(llm, request_params):
                     if llm.interpreter.verbose:
                         print("Arguments not a dict.")
 
-            # Common hallucinations
-            elif "name" in accumulated_deltas["function_call"] and (
-                accumulated_deltas["function_call"]["name"] == "python"
-                or accumulated_deltas["function_call"]["name"] == "functions"
-            ):
-                if llm.interpreter.verbose:
-                    print("Got direct python call")
-                if language is None:
-                    language = "python"
-
-                if language is not None:
-                    # Pull the code string straight out of the "arguments" string
-                    code_delta = accumulated_deltas["function_call"]["arguments"][
-                        len(code) :
-                    ]
-                    # Update the code
-                    code = accumulated_deltas["function_call"]["arguments"]
-                    # Yield the delta
-                    if code_delta:
-                        yield {
-                            "type": "code",
-                            "format": language,
-                            "content": code_delta,
-                        }
-
-            else:
-                # If name exists and it's not "execute" or "python" or "functions", who knows what's going on.
-                if "name" in accumulated_deltas["function_call"]:
-                    yield {
-                        "type": "code",
-                        "format": "python",
-                        "content": accumulated_deltas["function_call"]["name"],
-                    }
-                    return
+    if os.getenv("INTERPRETER_REQUIRE_AUTHENTICATION", "False").lower() == "true":
+        print("function_call_detected", function_call_detected)
+        print("accumulated_review", accumulated_review)
+        if function_call_detected and not accumulated_review:
+            print("WTF!!!!!!!!!")
+            # import pdb
+            # pdb.set_trace()
+            raise Exception("Judge layer required but did not run.")

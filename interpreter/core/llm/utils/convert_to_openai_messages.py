@@ -83,6 +83,10 @@ def convert_to_openai_messages(
                 new_message["name"] = "execute"
                 if "content" not in message:
                     print("What is this??", content)
+                if type(message["content"]) != str:
+                    if interpreter.debug:
+                        print("\n\n\nStrange chunk found:", message, "\n\n\n")
+                    message["content"] = str(message["content"])
                 if message["content"].strip() == "":
                     new_message[
                         "content"
@@ -237,7 +241,9 @@ def convert_to_openai_messages(
 
         elif message["type"] == "file":
             new_message = {"role": "user", "content": message["content"]}
-
+        elif message["type"] == "error":
+            print("Ignoring 'type' == 'error' messages.")
+            continue
         else:
             raise Exception(f"Unable to convert this message type: {message}")
 
